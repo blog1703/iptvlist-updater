@@ -1,0 +1,111 @@
+name: CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch:
+  schedule:
+    - cron: '0 8,20 * * *'
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Make script executable
+        run: chmod +x update_m3u.sh
+
+      - name: Update M3U file
+        run: bash update_m3u.sh
+
+      - name: Check for changes
+        id: changes
+        run: |
+          if [ -z "$(git status --porcelain)" ]; then
+            echo "No changes detected."
+            echo "changes=false" >> $GITHUB_OUTPUT
+          else
+            echo "Changes detected."
+            echo "changes=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Install dependencies
+        if: steps.changes.outputs.changes == 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y curl jq lftp
+
+      - name: Upload M3U file to target repository
+        if: steps.changes.outputs.changes == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.TARGET_REPO_TOKEN }}
+        run: |
+          # Установите путь к файлу и данные репозитория
+          FILE_PATH="iptvlist.m3u"
+          TARGET_REPO_OWNER="blog1703"
+          TARGET_REPO_NAME="tv"
+          TARGET_BRANCH="main"  # Укажите ветку, в которую нужно загрузить файл
+
+          # Получите текущий SHA файла (если файл уже существует)
+          echo "Получение SHA файла..."
+          FILE_SHA=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/repos/$TARGET_REPO_OWNER/$TARGET_REPO_NAME/contents/$FILE_PATH?ref=$TARGET_BRANCH" \
+            | jq -r '.sha')
+
+          # Закодируйте файл в base64
+          echo "Кодирование файла в base64..."
+          FILE_CONTENT_BASE64=$(base64 -w 0 $FILE_PATH)
+
+          # Создайте JSON для загрузки файла и сохраните его в файл
+          echo "Создание JSON payload..."
+          echo '{
+            "message": "Automated update of iptv.m3u",
+            "content": "'"$FILE_CONTENT_BASE64"'",
+            "branch": "'"$TARGET_BRANCH"'",
+            "sha": "'"$FILE_SHA"'"
+          }' > payload.json
+
+          # Загрузите файл через GitHub API, используя сохраненный JSON
+          echo "Загрузка файла в целевой репозиторий..."
+          curl -X PUT \
+            -H "Authorization: token $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github.v3+json" \
+            --data-binary @payload.json \
+            "https://api.github.com/repos/$TARGET_REPO_OWNER/$TARGET_REPO_NAME/contents/$FILE_PATH"
+
+          # Удалите временный файл payload.json
+          echo "Очистка временных файлов..."
+          rm -f payload.json
+
+      - name: Upload M3U file to FTP
+        if: steps.changes.outputs.changes == 'true'
+        run: |
+          echo "Загрузка файла на FTP-сервер..."
+          lftp -e "
+          set ftp:ssl-allow no;
+          open -u ${{ secrets.FTP_USERNAME }},${{ secrets.FTP_PASSWORD }} ${{ secrets.FTP_HOST }};
+          put iptv.m3u -o iptv.m3u;  # Загружаем в домашнюю директорию пользователя
+          bye;
+          "
+
+      - name: Verify file accessibility
+        if: steps.changes.outputs.changes == 'true'
+        run: |
+          echo "Проверка доступности файла по URL..."
+          HTTP_CODE=$(curl -o /dev/null -s -w "%{http_code}\n" https://iptvgive.ucoz.net/iptvlist.m3u)
+          if [ "$HTTP_CODE" -eq 200 ]; then
+            echo "Файл доступен."
+          else
+            echo "Файл недоступен. HTTP код: $HTTP_CODE"
+            exit 1
+          fi
+
+      - name: Notify no changes
+        if: steps.changes.outputs.changes == 'false'
+        run: echo "Нет изменений для коммита."
+
