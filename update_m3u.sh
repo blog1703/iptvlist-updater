@@ -19,10 +19,10 @@ chmod u+w "$LOG_FILE"
 echo "Скрипт начал выполнение: $(date)" >> "$LOG_FILE"
 
 # URL источника M3U файла
-SOURCE_URL="https://iptvshared.ucoz.net/IPTV_SHARED.m3u"
+SOURCE_URL="https://smolnp.github.io/IPTVru//IPTVru.m3u"
 
 # Путь, куда сохранять обновленный файл
-DESTINATION_PATH="iptv.m3u"
+DESTINATION_PATH="iptvlist.m3u"
 
 # Локальный плейлист
 LOCAL_PLAYLIST="local_playlist.m3u"
