@@ -15,6 +15,9 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          # Добавьте этот параметр
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Make script executable
         run: chmod +x update_m3u.sh
@@ -53,33 +56,36 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.TARGET_REPO_TOKEN }}
         run: |
-          # Установите путь к файлу и данные репозитория
           FILE_PATH="iptvlist.m3u"
           TARGET_REPO_OWNER="blog1703"
           TARGET_REPO_NAME="tv"
           TARGET_BRANCH="main"
 
-          # Получите текущий SHA файла (если файл уже существует)
           echo "Получение SHA файла..."
           FILE_SHA=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
             -H "Accept: application/vnd.github.v3+json" \
             "https://api.github.com/repos/$TARGET_REPO_OWNER/$TARGET_REPO_NAME/contents/$FILE_PATH?ref=$TARGET_BRANCH" \
-            | jq -r '.sha')
+            | jq -r '.sha' || echo "")
 
-          # Закодируйте файл в base64
           echo "Кодирование файла в base64..."
           FILE_CONTENT_BASE64=$(base64 -w 0 $FILE_PATH)
 
-          # Создайте JSON для загрузки файла и сохраните его в файл
           echo "Создание JSON payload..."
-          echo '{
-            "message": "Automated update of iptvlist.m3u",
-            "content": "'"$FILE_CONTENT_BASE64"'",
-            "branch": "'"$TARGET_BRANCH"'",
-            "sha": "'"$FILE_SHA"'"
-          }' > payload.json
+          if [ -z "$FILE_SHA" ]; then
+            echo '{
+              "message": "Automated update of iptvlist.m3u",
+              "content": "'"$FILE_CONTENT_BASE64"'",
+              "branch": "'"$TARGET_BRANCH"'"
+            }' > payload.json
+          else
+            echo '{
+              "message": "Automated update of iptvlist.m3u",
+              "content": "'"$FILE_CONTENT_BASE64"'",
+              "branch": "'"$TARGET_BRANCH"'",
+              "sha": "'"$FILE_SHA"'"
+            }' > payload.json
+          fi
 
-          # Загрузите файл через GitHub API, используя сохраненный JSON
           echo "Загрузка файла в целевой репозиторий..."
           curl -X PUT \
             -H "Authorization: token $GITHUB_TOKEN" \
@@ -87,8 +93,6 @@ jobs:
             --data-binary @payload.json \
             "https://api.github.com/repos/$TARGET_REPO_OWNER/$TARGET_REPO_NAME/contents/$FILE_PATH"
 
-          # Удалите временный файл payload.json
-          echo "Очистка временных файлов..."
           rm -f payload.json
 
       - name: Notify no changes
