@@ -37,7 +37,16 @@ jobs:
         if: steps.changes.outputs.changes == 'true'
         run: |
           sudo apt-get update
-          sudo apt-get install -y curl jq lftp
+          sudo apt-get install -y curl jq
+
+      - name: Commit and push changes to current repository
+        if: steps.changes.outputs.changes == 'true'
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add iptvlist.m3u
+          git commit -m "Auto-update iptvlist.m3u"
+          git push
 
       - name: Upload M3U file to target repository
         if: steps.changes.outputs.changes == 'true'
@@ -48,7 +57,7 @@ jobs:
           FILE_PATH="iptvlist.m3u"
           TARGET_REPO_OWNER="blog1703"
           TARGET_REPO_NAME="tv"
-          TARGET_BRANCH="main"  # Укажите ветку, в которую нужно загрузить файл
+          TARGET_BRANCH="main"
 
           # Получите текущий SHA файла (если файл уже существует)
           echo "Получение SHA файла..."
@@ -81,29 +90,6 @@ jobs:
           # Удалите временный файл payload.json
           echo "Очистка временных файлов..."
           rm -f payload.json
-
-      - name: Upload M3U file to FTP
-        if: steps.changes.outputs.changes == 'true'
-        run: |
-          echo "Загрузка файла на FTP-сервер..."
-          lftp -e "
-          set ftp:ssl-allow no;
-          open -u ${{ secrets.FTP_USERNAME }},${{ secrets.FTP_PASSWORD }} ${{ secrets.FTP_HOST }};
-          put iptvlist.m3u -o iptvlist.m3u;  # Загружаем в домашнюю директорию пользователя
-          bye;
-          "
-
-      - name: Verify file accessibility
-        if: steps.changes.outputs.changes == 'true'
-        run: |
-          echo "Проверка доступности файла по URL..."
-          HTTP_CODE=$(curl -o /dev/null -s -w "%{http_code}\n" https://iptvgive.ucoz.net/iptvlist.m3u)
-          if [ "$HTTP_CODE" -eq 200 ]; then
-            echo "Файл доступен."
-          else
-            echo "Файл недоступен. HTTP код: $HTTP_CODE"
-            exit 1
-          fi
 
       - name: Notify no changes
         if: steps.changes.outputs.changes == 'false'
