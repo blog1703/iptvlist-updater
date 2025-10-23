@@ -15,9 +15,6 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          # Добавьте этот параметр
-          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Make script executable
         run: chmod +x update_m3u.sh
@@ -41,15 +38,6 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y curl jq
-
-      - name: Commit and push changes to current repository
-        if: steps.changes.outputs.changes == 'true'
-        run: |
-          git config --local user.email "action@github.com"
-          git config --local user.name "GitHub Action"
-          git add iptvlist.m3u
-          git commit -m "Auto-update iptvlist.m3u"
-          git push
 
       - name: Upload M3U file to target repository
         if: steps.changes.outputs.changes == 'true'
